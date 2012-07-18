@@ -12,5 +12,4 @@ files = [	"gencores_pkg.vhd",
                 "gc_dual_clock_ram.vhd",
                 "gc_wfifo.vhd",
                 "gc_rr_arbiter.vhd",
-                "old_arbs/gc_rr_arbiter3.vhd",
                 "gc_prio_encoder.vhd"];
