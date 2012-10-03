@@ -100,6 +100,17 @@ architecture rtl of gc_crc_gen is
     return v_result;
   end;
 
+  function f_reverse_bytes (a : in std_logic_vector)
+    return std_logic_vector is
+    variable v_result : std_logic_vector(a'reverse_range);
+  begin
+    for i in a'range loop
+      v_result(i) := a(((a'length/8-1) - i/8)*8 + (i mod 8));
+    end loop;
+    return v_result;
+  end;
+
+
   constant msb      : integer                        := g_polynomial'length - 1;
   constant init_msb : integer                        := g_init_value'length - 1;
   constant p        : std_logic_vector(msb downto 0) := g_polynomial;
@@ -113,11 +124,11 @@ architecture rtl of gc_crc_gen is
   signal arst, srst : std_logic;
 
   signal a, b    : std_logic_vector(g_polynomial'length - 1 downto 0);
-  signal data_i2 : std_logic_vector(15 downto 0);
+  signal data_i2 : std_logic_vector(g_data_width-1 downto 0);
   signal en_d0   : std_logic;
   signal half_d0 : std_logic;
-  signal crc_tmp : std_logic_vector(31 downto 0);
-  signal crc_int : std_logic_vector(31 downto 0);
+  signal crc_tmp : std_logic_vector(g_polynomial'length-1 downto 0);
+  signal crc_int : std_logic_vector(g_polynomial'length-1 downto 0);
   
 
   
@@ -195,7 +206,7 @@ begin
 
 -- CRC process
   crc_tmp <= f_reverse_vector(not crc);
-  crc_int <= crc_tmp(7 downto 0) & crc_tmp(15 downto 8) & crc_tmp(23 downto 16) & crc_tmp(31 downto 24);
+  crc_int <= f_reverse_bytes(crc_tmp); --crc_tmp(7 downto 0) & crc_tmp(15 downto 8) & crc_tmp(23 downto 16) & crc_tmp(31 downto 24);
   zero    <= (others => '0');
 
   crc_o <= crc_int;
