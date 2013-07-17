@@ -72,7 +72,10 @@ architecture rtl of pcie_wb is
   signal r_error : std_logic_vector(63 downto  0);
   
   -- interrupt signals
-  signal fifo_full, r_fifo_full, app_int_sts, app_msi_req : std_logic;
+  signal fifo_full, r_fifo_full, app_int_sts, app_msi_req, irq_req : std_logic;
+  signal app_msi_num : std_logic_vector (4 downto 0); --msi irq number
+  signal	app_msi_tc  : std_logic_vector (2 downto 0); --msi traffic class
+  
 begin
 
   pcie_phy : pcie_altera 
@@ -89,6 +92,8 @@ begin
       pcie_tx_o     => pcie_tx_o,
 
       cfg_busdev_o  => cfg_busdev,
+		app_msi_num	  => app_msi_num, 	
+      app_msi_tc    => app_msi_tc,
       app_msi_req   => app_msi_req,
       app_int_sts   => app_int_sts,
 
@@ -201,7 +206,7 @@ begin
   -- Notify the system when the FIFO is non-empty
   fifo_full <= int_master_o.cyc and int_master_o.stb;
   app_int_sts <= fifo_full and r_int; -- Classic interrupt until FIFO drained
-  app_msi_req <= fifo_full and not r_fifo_full; -- Edge-triggered MSI
+  app_msi_req <= fifo_full and not r_fifo_full or irq_req; -- Edge-triggered MSI
   
   int_master_i.rty <= '0';
   
@@ -209,7 +214,10 @@ begin
   begin
     if rising_edge(internal_wb_clk) then
       r_fifo_full <= fifo_full;
-      
+      irq_req <= '0';
+		app_msi_tc  <= (others => '0');  --msi traffic class
+		app_msi_num <= (others => '0'); --msi irq number
+		
       -- Shift in the error register
       if int_slave_o.ack = '1' or int_slave_o.err = '1' or int_slave_o.rty = '1' then
         r_error <= r_error(r_error'length-2 downto 0) & (int_slave_o.err or int_slave_o.rty);
@@ -268,7 +276,12 @@ begin
 		  r_int <= int_slave_i.dat(29);
 		end if;
               end if;
-            when "00101" => -- Window offset low
+            when "00001" => -- MSI Request
+					irq_req 		<= '1';
+					app_msi_tc 	<= slave_i.dat(7 downto 5); --msi traffic class
+					app_msi_num <= slave_i.dat(4 downto 0); --msi irq number
+					
+				when "00101" => -- Window offset low
               if int_slave_i.sel(3) = '1' then
                 r_addr(31 downto 24) <= int_slave_i.dat(31 downto 24);
               end if;

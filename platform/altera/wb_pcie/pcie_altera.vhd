@@ -19,7 +19,9 @@ entity pcie_altera is
     pcie_tx_o     : out std_logic_vector(3 downto 0);
     
     cfg_busdev_o  : out std_logic_vector(12 downto 0); -- Configured Bus#:Dev#    
-
+	
+	 app_msi_num   : in  std_logic_vector (4 downto 0);
+    app_msi_tc    : in  std_logic_vector (2 downto 0);
     app_msi_req   : in  std_logic; -- Generate an MSI interrupt
     app_int_sts   : in  std_logic; -- Generate a legacy interrupt
     
@@ -568,9 +570,9 @@ begin
         
         -- PCIe interrupts (for endpoint)
         app_int_sts          => app_int_sts,
-        app_msi_num          => (others => '0'), -- 4 downto 0
+        app_msi_num          => app_msi_num, -- 4 downto 0
         app_msi_req          => app_msi_req,
-        app_msi_tc           => (others => '0'), -- 2 downto 0
+        app_msi_tc           => app_msi_tc, -- 2 downto 0
         pex_msi_num          => (others => '0'), --  4 downto 0
         app_int_ack          => open,
         app_msi_ack          => open,

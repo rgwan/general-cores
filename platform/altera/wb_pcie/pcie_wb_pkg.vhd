@@ -4,6 +4,22 @@ use ieee.numeric_std.all;
 use work.wishbone_pkg.all;
 
 package pcie_wb_pkg is
+   constant c_pcie_ctrl_sdb : t_sdb_device := (
+    abi_class     => x"0000", -- undocumented device
+    abi_ver_major => x"01",
+    abi_ver_minor => x"00",
+    wbd_endian    => c_sdb_endian_big,
+    wbd_width     => x"1", -- 8/16/32-bit port granularity
+    sdb_component => (
+    addr_first    => x"0000000000000000",
+    addr_last     => x"000000000000007f", -- 32 4 byte registers
+    product => (
+    vendor_id     => x"0000000000000651", -- GSI
+    device_id     => x"00009C1E",
+    version       => x"00000001",
+    date          => x"20130710",
+    name          => "PCIE_BRIDGE_CTRL   ")));
+  
   component pcie_wb is
     generic(
       g_family : string := "Arria II";
@@ -46,9 +62,12 @@ package pcie_wb_pkg is
       
       cfg_busdev_o  : out std_logic_vector(12 downto 0); -- Configured Bus#:Dev#
       
-      app_msi_req   : in  std_logic; -- Generate an MSI interrupt
+      app_msi_num   : in  std_logic_vector (4 downto 0); --msi irq number
+		app_msi_tc    : in  std_logic_vector (2 downto 0); --msi traffic class
+		app_msi_req   : in  std_logic; -- Generate an MSI interrupt
       app_int_sts   : in  std_logic; -- Generate a legacy interrupt
       
+		
       -- Simplified wishbone output stream
       wb_clk_o      : out std_logic;
       wb_rstn_i     : in  std_logic;
