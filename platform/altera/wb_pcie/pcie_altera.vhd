@@ -24,7 +24,8 @@ entity pcie_altera is
     app_msi_tc    : in  std_logic_vector (2 downto 0);
     app_msi_req   : in  std_logic; -- Generate an MSI interrupt
     app_int_sts   : in  std_logic; -- Generate a legacy interrupt
-    
+    app_msi_ack   : out std_logic; -- MSI Acknowledge 
+      
     -- Simplified wishbone output stream
     wb_clk_o      : out std_logic; -- core_clk_out (of PCIe Hard-IP)
     wb_rstn_i     : in  std_logic; -- wb_rstn_i in PCIe clock domain
@@ -575,7 +576,7 @@ begin
         app_msi_tc           => app_msi_tc, -- 2 downto 0
         pex_msi_num          => (others => '0'), --  4 downto 0
         app_int_ack          => open,
-        app_msi_ack          => open,
+        app_msi_ack          => app_msi_ack,
         
         -- PCIe configuration space
         hpg_ctrler           => (others => '0'), --  4 downto 0

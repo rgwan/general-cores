@@ -18,7 +18,7 @@ package pcie_wb_pkg is
     device_id     => x"00009C1E",
     version       => x"00000001",
     date          => x"20130710",
-    name          => "PCIE_BRIDGE_CTRL   ")));
+    name          => "PCIE_MSI_REQ       ")));
   
   component pcie_wb is
     generic(
@@ -45,6 +45,9 @@ package pcie_wb_pkg is
       slave_rstn_i  : in  std_logic := '1';
       slave_i       : in  t_wishbone_slave_in := cc_dummy_slave_in;
       slave_o       : out t_wishbone_slave_out);
+      
+      irq_slave_i       : in  t_wishbone_slave_in := cc_dummy_slave_in;
+      irq_slave_o       : out t_wishbone_slave_out
   end component;
   
   component pcie_altera is
@@ -63,10 +66,10 @@ package pcie_wb_pkg is
       cfg_busdev_o  : out std_logic_vector(12 downto 0); -- Configured Bus#:Dev#
       
       app_msi_num   : in  std_logic_vector (4 downto 0); --msi irq number
-		app_msi_tc    : in  std_logic_vector (2 downto 0); --msi traffic class
-		app_msi_req   : in  std_logic; -- Generate an MSI interrupt
+		  app_msi_tc    : in  std_logic_vector (2 downto 0); --msi traffic class
+		  app_msi_req   : in  std_logic; -- Generate an MSI interrupt
       app_int_sts   : in  std_logic; -- Generate a legacy interrupt
-      
+      app_msi_ack   : out std_logic; -- MSI Acknowledge 
 		
       -- Simplified wishbone output stream
       wb_clk_o      : out std_logic;

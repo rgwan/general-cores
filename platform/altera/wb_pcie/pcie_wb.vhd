@@ -30,7 +30,13 @@ entity pcie_wb is
     slave_clk_i   : in  std_logic := '0';
     slave_rstn_i  : in  std_logic := '1';
     slave_i       : in  t_wishbone_slave_in := cc_dummy_slave_in;
-    slave_o       : out t_wishbone_slave_out);
+    slave_o       : out t_wishbone_slave_out;
+    
+    -- MSI IRQ Slave
+    irq_slave_i       : in  t_wishbone_slave_in := cc_dummy_slave_in;
+    irq_slave_o       : out t_wishbone_slave_out
+    
+    );
 end pcie_wb;
 
 architecture rtl of pcie_wb is
@@ -64,6 +70,9 @@ architecture rtl of pcie_wb is
   -- Internal WB clock: FPGA->PC
   signal int_master_o : t_wishbone_master_out;
   signal int_master_i : t_wishbone_master_in;
+  -- Internal WB clock: IRQ Slave->PCIe
+  signal irq_master_o : t_wishbone_master_out;
+  signal irq_master_i : t_wishbone_master_in;
   
   -- control registers
   signal r_cyc   : std_logic;
@@ -72,9 +81,10 @@ architecture rtl of pcie_wb is
   signal r_error : std_logic_vector(63 downto  0);
   
   -- interrupt signals
-  signal fifo_full, r_fifo_full, app_int_sts, app_msi_req, irq_req : std_logic;
-  signal app_msi_num : std_logic_vector (4 downto 0); --msi irq number
-  signal	app_msi_tc  : std_logic_vector (2 downto 0); --msi traffic class
+  signal fifo_full, r_fifo_full, app_int_sts, app_msi_req, app_msi_ack : std_logic;
+  signal app_msi_num      : std_logic_vector (4 downto 0); --msi irq number
+  signal app_msi_tc       : std_logic_vector (2 downto 0); --msi traffic class
+  signal irq_valid        : std_logic;
   
 begin
 
@@ -92,11 +102,12 @@ begin
       pcie_tx_o     => pcie_tx_o,
 
       cfg_busdev_o  => cfg_busdev,
-		app_msi_num	  => app_msi_num, 	
+		  app_msi_num	  => app_msi_num, 	
       app_msi_tc    => app_msi_tc,
       app_msi_req   => app_msi_req,
       app_int_sts   => app_int_sts,
-
+      app_msi_ack   => app_msi_ack,
+      
       wb_clk_o      => internal_wb_clk,
       wb_rstn_i     => internal_wb_rstn,
       
@@ -203,20 +214,48 @@ begin
     master_i       => int_master_i,
     master_o       => int_master_o);
 
-  -- Notify the system when the FIFO is non-empty
+  IRQ_Slave_to_PCIe_crossing : xwb_clock_crossing port map(
+    slave_clk_i    => slave_clk_i,
+    slave_rst_n_i  => slave_rstn_i,
+    slave_i        => irq_slave_i,
+    slave_o        => irq_slave_o,
+    master_clk_i   => internal_wb_clk, 
+    master_rst_n_i => internal_wb_rstn,
+    master_i       => irq_master_i,
+    master_o       => irq_master_o);
+
+
+  -- Notify the system when the FIFO is non-empty or MSI was requested
+  irq_valid <= irq_master_o.cyc and irq_master_o.stb and not irq_master_i.stall;
+  
   fifo_full <= int_master_o.cyc and int_master_o.stb;
   app_int_sts <= fifo_full and r_int; -- Classic interrupt until FIFO drained
-  app_msi_req <= fifo_full and not r_fifo_full or irq_req; -- Edge-triggered MSI
+  app_msi_req <= (fifo_full and not r_fifo_full) or irq_valid; -- Edge-triggered MSI
+  app_msi_tc 	<= irq_master_o.dat(7 downto 5) when irq_valid
+	          else (others => '0'); --msi traffic class
+	app_msi_num <= irq_master_o.dat(4 downto 0) when irq_valid  
+	          else (others => '0'); --msi irq number
+  
+  irq_master_i.err <= '0';
+  irq_master_i.rty <= '0';
+  irq_master_i.dat <= (others => '0');
+  
+  irq_slave : process(internal_wb_clk, internal_wb_rstn)
+  begin
+    if(internal_wb_rstn = '0') then
+      irq_master_i.stall <= '0';
+    elsif rising_edge(internal_wb_clk) then
+      irq_master_i.ack   <= irq_valid;
+      irq_master_i.stall <= (irq_master_i.stall or irq_valid) and not app_msi_ack;
+    end if;
+  end process;
   
   int_master_i.rty <= '0';
-  
-  control : process(internal_wb_clk)
+					    
+	control : process(internal_wb_clk)
   begin
     if rising_edge(internal_wb_clk) then
       r_fifo_full <= fifo_full;
-      irq_req <= '0';
-		app_msi_tc  <= (others => '0');  --msi traffic class
-		app_msi_num <= (others => '0'); --msi irq number
 		
       -- Shift in the error register
       if int_slave_o.ack = '1' or int_slave_o.err = '1' or int_slave_o.rty = '1' then
@@ -224,7 +263,7 @@ begin
       end if;
       
       if wb_bar = "001" then
-	wb_ack <= int_slave_o.ack;
+	      wb_ack <= int_slave_o.ack;
         wb_dat <= int_slave_o.dat;
       else -- The control BAR is targetted
         -- Feedback acks one cycle after strobe
@@ -232,32 +271,32 @@ begin
 	
 	-- Always output read result (even w/o stb or we)
         case wb_adr(6 downto 2) is
-	  when "00000" => -- Control register high
-	    wb_dat(31) <= r_cyc;
-	    wb_dat(30) <= '0';
-	    wb_dat(29) <= r_int;
-	    wb_dat(28 downto 0) <= (others => '0');
-	  when "00010" => -- Error flag high
-	    wb_dat <= r_error(63 downto 32);
-	  when "00011" => -- Error flag low
-	    wb_dat <= r_error(31 downto 0);
-	  when "00101" => -- Window offset low
-            wb_dat(r_addr'range) <= r_addr;
-	    wb_dat(r_addr'right-1 downto 0) <= (others => '0');
-	  when "00111" => -- SDWB address low
-	    wb_dat <= sdb_addr;
-	  when "10000" => -- Master FIFO status & flags
-	    wb_dat(31) <= fifo_full;
-	    wb_dat(30) <= int_master_o.we;
-	    wb_dat(29 downto 4) <= (others => '0');
-	    wb_dat(3 downto 0) <= int_master_o.sel;
-	  when "10011" => -- Master FIFO adr low
-	    wb_dat <= int_master_o.adr;
-	  when "10101" => -- Master FIFO dat low
-	    wb_dat <= int_master_o.dat;
-	  when others =>
-	    wb_dat <= (others => '0');
-	end case;
+	        when "00000" => -- Control register high
+	          wb_dat(31) <= r_cyc;
+	          wb_dat(30) <= '0';
+	          wb_dat(29) <= r_int;
+	          wb_dat(28 downto 0) <= (others => '0');
+	        when "00010" => -- Error flag high
+	          wb_dat <= r_error(63 downto 32);
+	        when "00011" => -- Error flag low
+	          wb_dat <= r_error(31 downto 0);
+	        when "00101" => -- Window offset low
+                  wb_dat(r_addr'range) <= r_addr;
+	          wb_dat(r_addr'right-1 downto 0) <= (others => '0');
+	        when "00111" => -- SDWB address low
+	          wb_dat <= sdb_addr;
+	        when "10000" => -- Master FIFO status & flags
+	          wb_dat(31) <= fifo_full;
+	          wb_dat(30) <= int_master_o.we;
+	          wb_dat(29 downto 4) <= (others => '0');
+	          wb_dat(3 downto 0) <= int_master_o.sel;
+	        when "10011" => -- Master FIFO adr low
+	          wb_dat <= int_master_o.adr;
+	        when "10101" => -- Master FIFO dat low
+	          wb_dat <= int_master_o.dat;
+	        when others =>
+	          wb_dat <= (others => '0');
+	      end case;
 	
 	-- Unless requested to by the PC, don't deque the FPGA->PC FIFO
         int_master_i.stall <= '1';
@@ -269,19 +308,15 @@ begin
           case wb_adr(6 downto 2) is
             when "00000" => -- Control register high
               if int_slave_i.sel(3) = '1' then
-	        if int_slave_i.dat(30) = '1' then
+	              if int_slave_i.dat(30) = '1' then
                   r_cyc <= int_slave_i.dat(31);
-		end if;
-		if int_slave_i.dat(28) = '1' then
-		  r_int <= int_slave_i.dat(29);
-		end if;
+		            end if;
+		            if int_slave_i.dat(28) = '1' then
+		              r_int <= int_slave_i.dat(29);
+		            end if;
               end if;
-            when "00001" => -- MSI Request
-					irq_req 		<= '1';
-					app_msi_tc 	<= slave_i.dat(7 downto 5); --msi traffic class
-					app_msi_num <= slave_i.dat(4 downto 0); --msi irq number
-					
-				when "00101" => -- Window offset low
+            
+				    when "00101" => -- Window offset low
               if int_slave_i.sel(3) = '1' then
                 r_addr(31 downto 24) <= int_slave_i.dat(31 downto 24);
               end if;
