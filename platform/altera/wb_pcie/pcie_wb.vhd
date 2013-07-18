@@ -230,7 +230,7 @@ begin
   
   fifo_full <= int_master_o.cyc and int_master_o.stb;
   app_int_sts <= fifo_full and r_int; -- Classic interrupt until FIFO drained
-  app_msi_req <= (fifo_full and not r_fifo_full) or irq_valid; -- Edge-triggered MSI
+  app_msi_req <= (fifo_full and not r_fifo_full) or (irq_valid and irq_master_o.we); -- Edge-triggered MSI
   app_msi_tc 	<= irq_master_o.dat(7 downto 5) when irq_valid
 	          else (others => '0'); --msi traffic class
 	app_msi_num <= irq_master_o.dat(4 downto 0) when irq_valid  
@@ -238,7 +238,7 @@ begin
   
   irq_master_i.err <= '0';
   irq_master_i.rty <= '0';
-  irq_master_i.dat <= (others => '0');
+  irq_master_i.dat <= x"00009C1E";
   
   irq_slave : process(internal_wb_clk, internal_wb_rstn)
   begin
@@ -246,7 +246,7 @@ begin
       irq_master_i.stall <= '0';
     elsif rising_edge(internal_wb_clk) then
       irq_master_i.ack   <= irq_valid;
-      irq_master_i.stall <= (irq_master_i.stall or irq_valid) and not app_msi_ack;
+      --irq_master_i.stall <= (irq_master_i.stall or irq_valid) and not app_msi_ack;
     end if;
   end process;
   

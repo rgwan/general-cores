@@ -9,10 +9,10 @@ package pcie_wb_pkg is
     abi_ver_major => x"01",
     abi_ver_minor => x"00",
     wbd_endian    => c_sdb_endian_big,
-    wbd_width     => x"1", -- 8/16/32-bit port granularity
+    wbd_width     => x"7", -- 8/16/32-bit port granularity
     sdb_component => (
     addr_first    => x"0000000000000000",
-    addr_last     => x"000000000000007f", -- 32 4 byte registers
+    addr_last     => x"0000000000000003", -- 1 byte registers
     product => (
     vendor_id     => x"0000000000000651", -- GSI
     device_id     => x"00009C1E",
