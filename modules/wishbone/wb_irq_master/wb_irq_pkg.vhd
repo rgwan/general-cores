@@ -46,26 +46,33 @@ package wb_irq_pkg is
   function or_all(slv_in : std_logic_vector)        return std_logic; 
   
   component wb_irq_master is
-  generic (g_irq_lines  : natural := 8;
-           g_ivec_table : t_ivec_array_ad
-  );
-  port    (clk_i          : std_logic;
+    port    (clk_i          : std_logic;
            rst_n_i        : std_logic; 
-           irql_i         : in  std_logic_vector(g_irq_lines-1 downto 0);
+           
            master_o       : out t_wishbone_master_out;
-           master_i       : in  t_wishbone_master_in
+           master_i       : in  t_wishbone_master_in;
+           
+           irq_i          : std_logic;
+           adr_i          : t_wishbone_address;
+           msg_i          : t_wishbone_data
   );
   end component;
   
   component wb_irq_slave is
-  generic (g_irq_lines  : natural := 8;
-           g_ivec_table : t_ivec_array_d
+  generic ( g_queues  : natural := 4;
+            g_depth   : natural := 8;
+            g_datbits : natural := 32;
+            g_adrbits : natural := 32;
+            g_selbits : natural := 4
   );
   port    (clk_i         : std_logic;
            rst_n_i       : std_logic; 
-           irql_o        : out std_logic_vector(g_irq_lines-1 downto 0);
-           slave_o       : out t_wishbone_slave_out;
-           slave_i       : in  t_wishbone_slave_in
+           
+           irq_slave_o   : out t_wishbone_slave_out_array(g_queues-1 downto 0);
+           irq_slave_i   : in  t_wishbone_slave_in_array(g_queues-1 downto 0);
+           
+           ctrl_slave_o  : out t_wishbone_slave_out;
+           ctrl_slave_i  : in  t_wishbone_slave_in
   );
   end component;
   
