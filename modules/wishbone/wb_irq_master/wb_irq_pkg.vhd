@@ -45,6 +45,54 @@ package wb_irq_pkg is
   function f_bin_to_hot(x : natural; len : natural) return std_logic_vector;
   function or_all(slv_in : std_logic_vector)        return std_logic; 
   
+  constant c_irq_hostbridge_ep_sdb : t_sdb_device := (
+    abi_class     => x"0000", -- undocumented device
+    abi_ver_major => x"01",
+    abi_ver_minor => x"01",
+    wbd_endian    => c_sdb_endian_big,
+    wbd_width     => x"7", -- 8/16/32-bit port granularity
+    sdb_component => (
+    addr_first    => x"0000000000000000",
+    addr_last     => x"000000000000ffff",
+    product => (
+    vendor_id     => x"0000000000000651", -- GSI
+    device_id     => x"10050081",
+    version       => x"00000001",
+    date          => x"20120308",
+    name          => "IRQ_HOSTBRIDGE_EP  ")));
+  
+  constant c_irq_ep_sdb : t_sdb_device := (
+    abi_class     => x"0000", -- undocumented device
+    abi_ver_major => x"01",
+    abi_ver_minor => x"01",
+    wbd_endian    => c_sdb_endian_big,
+    wbd_width     => x"7", -- 8/16/32-bit port granularity
+    sdb_component => (
+    addr_first    => x"0000000000000000",
+    addr_last     => x"000000000000ffff",
+    product => (
+    vendor_id     => x"0000000000000651", -- GSI
+    device_id     => x"10050081",
+    version       => x"00000001",
+    date          => x"20120308",
+    name          => "IRQ_ENDPOINT       ")));
+  
+  constant c_irq_ctrl_sdb : t_sdb_device := (
+    abi_class     => x"0000", -- undocumented device
+    abi_ver_major => x"01",
+    abi_ver_minor => x"01",
+    wbd_endian    => c_sdb_endian_big,
+    wbd_width     => x"7", -- 8/16/32-bit port granularity
+    sdb_component => (
+    addr_first    => x"0000000000000000",
+    addr_last     => x"00000000000000ff",
+    product => (
+    vendor_id     => x"0000000000000651", -- GSI
+    device_id     => x"10040081",
+    version       => x"00000001",
+    date          => x"20120308",
+    name          => "IRQ_CTRL           ")));
+  
   component wb_irq_master is
     port    (clk_i          : std_logic;
            rst_n_i        : std_logic; 
@@ -70,9 +118,30 @@ package wb_irq_pkg is
            
            irq_slave_o   : out t_wishbone_slave_out_array(g_queues-1 downto 0);
            irq_slave_i   : in  t_wishbone_slave_in_array(g_queues-1 downto 0);
+           irq_o         : out std_logic_vector(g_queues-1 downto 0);   
            
            ctrl_slave_o  : out t_wishbone_slave_out;
            ctrl_slave_i  : in  t_wishbone_slave_in
+  );
+  end component;
+  
+  component wb_irq_lm32 is
+  generic(g_msi_queues: natural := 3;
+          g_profile: string);
+  port(
+  clk_sys_i : in  std_logic;
+  rst_n_i : in  std_logic;
+
+  dwb_o  : out t_wishbone_master_out;
+  dwb_i  : in  t_wishbone_master_in;
+  iwb_o  : out t_wishbone_master_out;
+  iwb_i  : in  t_wishbone_master_in;
+
+  irq_slave_o  : out t_wishbone_slave_out_array(g_msi_queues-1 downto 0);  -- wb msi interface
+  irq_slave_i  : in  t_wishbone_slave_in_array(g_msi_queues-1 downto 0);
+           
+  ctrl_slave_o : out t_wishbone_slave_out;                             -- ctrl interface for LM32 irq processing
+  ctrl_slave_i : in  t_wishbone_slave_in
   );
   end component;
   
