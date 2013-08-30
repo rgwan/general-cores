@@ -71,7 +71,7 @@ signal r_rst_n, s_rst_n : std_logic;
 signal r_status, r_pop : std_logic_vector(31 downto 0);
 signal queue_offs : natural;
 signal word_offs  : natural;
-signal adr        : unsigned(11 downto 0);
+signal adr        : unsigned(7 downto 0);
 
 --queue signals
 type t_queue_dat is array(natural range <>) of std_logic_vector(g_datbits+g_adrbits+g_selbits-1 downto 0);
@@ -85,7 +85,7 @@ begin
   -------------------------------------------------------------------------
   --irq wb and queues
   -------------------------------------------------------------------------
-  irq_o <= r_status(g_queues-1 downto 0);
+  irq_o <= r_status(g_queues-1 downto 0); -- LM32 IRQs are active low!
   s_rst_n <= rst_n_i and r_rst_n;
   
   G1: for I in 0 to g_queues-1 generate
@@ -93,7 +93,7 @@ begin
     irq_d(I)              <= irq_slave_i(I).sel & irq_slave_i(I).adr & irq_slave_i(I).dat;
     irq_push(I)           <= irq_slave_i(I).cyc and irq_slave_i(I).stb and not irq_full(I); 
     irq_slave_o(I).stall  <= irq_full(I);
-    irq_pop(I)            <= r_pop(I);
+    irq_pop(I)            <= r_pop(I) and r_status(I);
     r_status(I)           <= not irq_empty(I);
     
     irq_slave_o(I).int    <= '0'; --will be obsolete soon
@@ -131,9 +131,9 @@ begin
   -------------------------------------------------------------------------
   r_status(31 downto g_queues) <= (others => '0');
   ctrl_en     <= ctrL_slave_i.cyc and ctrl_slave_i.stb;
-  adr         <= unsigned(ctrl_slave_i.adr(11 downto 2)) & "00";
+  adr         <= unsigned(ctrl_slave_i.adr(7 downto 2)) & "00";
   queue_offs  <= to_integer(adr(adr'left downto 4)-1);
-  word_offs   <= to_integer(adr(3 downto 2));
+  word_offs   <= to_integer(adr(3 downto 0));
 
   ctrl_slave_o.int    <= '0';
   ctrl_slave_o.rty    <= '0';
@@ -159,7 +159,7 @@ begin
             
           if(ctrl_en = '1') then
           
-            if(adr < c_QUEUES) then
+            if(to_integer(adr) < c_QUEUES) then
               case to_integer(adr) is -- control registers
                 when c_RST    =>  if(ctrl_slave_i.we = '1') then 
                                     r_rst_n <= '0';   

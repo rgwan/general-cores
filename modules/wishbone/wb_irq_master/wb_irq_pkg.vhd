@@ -53,7 +53,7 @@ package wb_irq_pkg is
     wbd_width     => x"7", -- 8/16/32-bit port granularity
     sdb_component => (
     addr_first    => x"0000000000000000",
-    addr_last     => x"000000000000ffff",
+    addr_last     => x"00000000000000ff",
     product => (
     vendor_id     => x"0000000000000651", -- GSI
     device_id     => x"10050081",
@@ -69,7 +69,7 @@ package wb_irq_pkg is
     wbd_width     => x"7", -- 8/16/32-bit port granularity
     sdb_component => (
     addr_first    => x"0000000000000000",
-    addr_last     => x"000000000000ffff",
+    addr_last     => x"00000000000000ff",
     product => (
     vendor_id     => x"0000000000000651", -- GSI
     device_id     => x"10050081",
