@@ -6,7 +6,7 @@
 -- Author     : Tomasz Wlostowski
 -- Company    : CERN
 -- Created    : 2009-09-01
--- Last update: 2012-03-12
+-- Last update: 2013-07-02
 -- Platform   : FPGA-generic
 -- Standard   : VHDL '93
 -------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ package gencores_pkg is
       extended_o : out std_logic);
   end component;
 
-  component gc_crc_gen
+    component gc_crc_gen
     generic (
       g_polynomial              : std_logic_vector       := x"04C11DB7";
       g_init_value              : std_logic_vector       := x"ffffffff";
@@ -68,15 +68,17 @@ package gencores_pkg is
       g_half_width              : integer range 2 to 256 := 8;
       g_sync_reset              : integer range 0 to 1   := 1;
       g_dual_width              : integer range 0 to 1   := 0;
-      g_registered_match_output : boolean                := true);
+      g_registered_match_output : boolean                := true;
+      g_registered_crc_output   : boolean                := true);
     port (
-      clk_i   : in  std_logic;
-      rst_i   : in  std_logic;
-      en_i    : in  std_logic;
-      half_i  : in  std_logic;
-      data_i  : in  std_logic_vector(g_data_width - 1 downto 0);
-      match_o : out std_logic;
-      crc_o   : out std_logic_vector(g_polynomial'length - 1 downto 0));
+      clk_i     : in  std_logic;
+      rst_i     : in  std_logic;
+      en_i      : in  std_logic;
+      half_i    : in  std_logic;
+      restart_i : in  std_logic := '0';
+      data_i    : in  std_logic_vector(g_data_width - 1 downto 0);
+      match_o   : out std_logic;
+      crc_o     : out std_logic_vector(g_polynomial'length - 1 downto 0));
   end component;
 
   component gc_moving_average
@@ -188,7 +190,7 @@ package gencores_pkg is
       q_valid_o    : out std_logic;
       q_input_id_o : out std_logic_vector(f_log2_size(g_num_inputs)-1 downto 0));
   end component;
-  
+ 
   -- Power-On reset generation
   component gc_reset is
     generic(
@@ -202,6 +204,33 @@ package gencores_pkg is
       rstn_o     : out std_logic_vector(g_clocks-1 downto 0));
   end component;
 
+   component gc_rr_arbiter
+    generic (
+      g_size : integer);
+    port (
+      clk_i        : in  std_logic;
+      rst_n_i      : in  std_logic;
+      req_i        : in  std_logic_vector(g_size-1 downto 0);
+      grant_o      : out std_logic_vector(g_size-1 downto 0);
+      grant_comb_o : out std_logic_vector(g_size-1 downto 0));
+  end component;
+
+  component gc_word_packer
+    generic (
+      g_input_width  : integer;
+      g_output_width : integer);
+    port (
+      clk_i     : in  std_logic;
+      rst_n_i   : in  std_logic;
+      d_i       : in  std_logic_vector(g_input_width-1 downto 0);
+      d_valid_i : in  std_logic;
+      d_req_o   : out std_logic;
+      flush_i   : in  std_logic := '0';
+      q_o       : out std_logic_vector(g_output_width-1 downto 0);
+      q_valid_o : out std_logic;
+      q_req_i   : in  std_logic);
+  end component;
+  
   procedure f_rr_arbitrate (
     signal req       : in  std_logic_vector;
     signal pre_grant : in  std_logic_vector;

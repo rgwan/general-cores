@@ -3,7 +3,8 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use ieee.genram_pkg.all;
+use work.genram_pkg.all;
+use work.altera_networks_pkg.all;
 
 entity pcie_altera is
   generic(
@@ -389,7 +390,7 @@ architecture rtl of pcie_altera is
     end if;
   end active_high;
 
-  signal core_clk_out, pll_locked : std_logic;
+  signal core_clk, core_clk_out, pll_locked : std_logic;
   signal rstn : std_logic;
   
   signal reconfig_clk     : std_logic;
@@ -449,7 +450,7 @@ begin
         -- Clocking
         refclk               => pcie_refclk_i,
         pld_clk              => core_clk_out,
-        core_clk_out         => core_clk_out,
+        core_clk_out         => core_clk,
         -- Simulation only clocks:
         pclk_in              => pcie_refclk_i,
         clk250_out           => open,
@@ -633,7 +634,7 @@ begin
         -- Clocking
         refclk             => pcie_refclk_i,
         pld_clk            => core_clk_out,
-        coreclkout         => core_clk_out,
+        coreclkout         => core_clk,
         pld_clk_inuse      => open,
         pld_core_ready     => pll_locked,
         
@@ -811,6 +812,11 @@ begin
         reconfig_to_xcvr   => reconfig_to_xcvr,
         reconfig_from_xcvr => xcvr_to_reconfig);
   end generate;
+  
+  coreclk : single_region
+    port map(
+      inclk  => core_clk,
+      outclk => core_clk_out);
   
   reset : process(core_clk_out)
   begin
