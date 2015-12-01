@@ -1,18 +1,17 @@
 -------------------------------------------------------------------------------
--- Title      : Parametrizable synchronous FIFO (Altera version)
+-- Title      : Parametrizable synchronous FIFO (Generic version)
 -- Project    : Generics RAMs and FIFOs collection
 -------------------------------------------------------------------------------
--- File       : generic_sync_fifo.vhd
+-- File       : generic_sync_fifo_std.vhd
 -- Author     : Tomasz Wlostowski
 -- Company    : CERN BE-CO-HT
 -- Created    : 2011-01-25
--- Last update: 2011-01-25
+-- Last update: 2013-11-14
 -- Platform   : 
 -- Standard   : VHDL'93
 -------------------------------------------------------------------------------
 -- Description: Single-clock FIFO. 
 -- - configurable data width and size
--- - "show ahead" mode
 -- - configurable full/empty/almost full/almost empty/word count signals
 -------------------------------------------------------------------------------
 -- Copyright (c) 2011 CERN
@@ -26,9 +25,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-
-library altera_mf;
-use altera_mf.all;
 
 use work.genram_pkg.all;
 
@@ -46,8 +42,10 @@ entity generic_sync_fifo is
     g_with_almost_full  : boolean := false;
     g_with_count        : boolean := false;  -- with words counter
 
-    g_almost_empty_threshold : integer;  -- threshold for almost empty flag
-    g_almost_full_threshold  : integer   -- threshold for almost full flag
+    g_almost_empty_threshold : integer := 0;  -- threshold for almost empty flag
+    g_almost_full_threshold  : integer := 0;  -- threshold for almost full flag
+
+    g_register_flag_outputs : boolean := true
     );
 
   port (
@@ -71,83 +69,205 @@ end generic_sync_fifo;
 
 architecture syn of generic_sync_fifo is
 
-  component scfifo
-    generic (
-      add_ram_output_register : string;
-      almost_empty_value      : natural;
-      almost_full_value       : natural;
-      lpm_numwords            : natural;
-      lpm_showahead           : string;
-      lpm_type                : string;
-      lpm_width               : natural;
-      lpm_widthu              : natural;
-      overflow_checking       : string;
-      underflow_checking      : string;
-      use_eab                 : string);
-    port (
-      clock        : in  std_logic;
-      sclr         : in  std_logic;
-      usedw        : out std_logic_vector (f_log2_size(g_size)-1 downto 0);
-      empty        : out std_logic;
-      full         : out std_logic;
-      q            : out std_logic_vector (g_data_width-1 downto 0);
-      wrreq        : in  std_logic;
-      almost_empty : out std_logic;
-      almost_full  : out std_logic;
-      data         : in  std_logic_vector (g_data_width-1 downto 0);
-      rdreq        : in  std_logic);
-  end component;
+  constant c_pointer_width                         : integer := f_log2_size(g_size);
+  signal   rd_ptr, wr_ptr, wr_ptr_d0, rd_ptr_muxed : unsigned(c_pointer_width-1 downto 0);
+  signal   usedw                                   : unsigned(c_pointer_width downto 0);
+  signal   full, empty                             : std_logic;
+  signal   q_int                                   : std_logic_vector(g_data_width-1 downto 0);
+  signal   we_int, rd_int                          : std_logic;
+  signal   guard_bit                               : std_logic;
 
-  function f_bool_2_string (x : boolean) return string is
-  begin
-    if(x) then
-      return "ON";
-    else
-      return "OFF";
-    end if;
-  end f_bool_2_string;
-
-  signal empty        : std_logic;
-  signal almost_empty : std_logic;
-  signal almost_full  : std_logic;
-  signal sclr         : std_logic;
-  signal full         : std_logic;
-  signal usedw        : std_logic_vector (f_log2_size(g_size)-1 downto 0);
+  signal q_reg, q_comb : std_logic_vector(g_data_width-1 downto 0);
   
 begin  -- syn
 
-  sclr <= not rst_n_i;
-
-  scfifo_inst: scfifo
+  --assert g_show_ahead = false report "Show ahead mode not implemented (yet). Sorry" severity failure;
+  
+  we_int <= we_i and not full;
+  rd_int <= rd_i and not empty;
+  
+  U_FIFO_Ram : generic_dpram
     generic map (
-      add_ram_output_register => "OFF",
-      almost_empty_value      => g_almost_empty_threshold,
-      almost_full_value       => g_almost_full_threshold, 
-      lpm_numwords            => g_size,
-      lpm_showahead           => f_bool_2_string(g_show_ahead),
-      lpm_type                => "scfifo",
-      lpm_width               => g_data_width,
-      lpm_widthu              => f_log2_size(g_size),
-      overflow_checking       => "ON",
-      underflow_checking      => "ON",
-      use_eab                 => "ON" )
+      g_data_width               => g_data_width,
+      g_size                     => g_size,
+      g_with_byte_enable         => false,
+      g_addr_conflict_resolution => "dont_care",
+      g_dual_clock               => false)
     port map (
-      clock        => clk_i,
-      sclr         => sclr,
-      usedw        => usedw,
-      empty        => empty,
-      full         => full,
-      q            => q_o,
-      wrreq        => we_i,
-      almost_empty => almost_empty,
-      almost_full  => almost_full,
-      data         => d_i,
-      rdreq        => rd_i);
+      rst_n_i => rst_n_i,
+      clka_i  => clk_i,
+      wea_i   => we_int,
+      aa_i    => std_logic_vector(wr_ptr(c_pointer_width-1 downto 0)),
+      da_i    => d_i,
+      clkb_i  => '0',
+      ab_i    => std_logic_vector(rd_ptr_muxed(c_pointer_width-1 downto 0)),
+      qb_o    => q_comb);
 
-  count_o <= usedw;
+  p_output_reg : process(clk_i)
+  begin
+    if rising_edge(clk_i) then
+      if rd_int = '1' then
+        q_reg <= q_comb;
+      end if;
+    end if;
+  end process;
+
+
+  process(rd_ptr, rd_i, rd_int)
+  begin
+    if(rd_int = '1' and g_show_ahead) then
+      rd_ptr_muxed <= rd_ptr + 1;
+    elsif((rd_int = '1' and not g_show_ahead) or (g_show_ahead)) then
+      rd_ptr_muxed <= rd_ptr;
+    else
+      rd_ptr_muxed <= rd_ptr - 1;
+    end if;
+  end process;
+
+--  q_o <= q_comb when g_show_ahead = true else q_reg;
+
+  q_o <= q_comb;
+
+  p_pointers : process(clk_i)
+  begin
+    if rising_edge(clk_i) then
+      if rst_n_i = '0' then
+        wr_ptr <= (others => '0');
+        rd_ptr <= (others => '0');
+      else
+        if(we_int = '1') then
+          wr_ptr <= wr_ptr + 1;
+        end if;
+
+        if(rd_int = '1') then
+          rd_ptr <= rd_ptr + 1;
+        end if;
+      end if;
+    end if;
+  end process;
+
+  gen_comb_flags_showahead : if(g_show_ahead = true) generate
+
+    process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        if ((rd_ptr + 1 = wr_ptr and rd_int = '1') or (rd_ptr = wr_ptr)) then
+          empty <= '1';
+        else
+          empty <= '0';
+        end if;
+      end if;
+    end process;
+    full <= '1' when (wr_ptr + 1 = rd_ptr) else '0';
+
+  end generate gen_comb_flags_showahead;
+
+  gen_comb_flags : if(g_register_flag_outputs = false and g_show_ahead = false) generate
+    empty <= '1' when (wr_ptr = rd_ptr and guard_bit = '0') else '0';
+    full  <= '1' when (wr_ptr = rd_ptr and guard_bit = '1') else '0';
+
+    p_guard_bit : process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        if rst_n_i = '0' then
+          guard_bit <= '0';
+        elsif(wr_ptr + 1 = rd_ptr and we_int = '1') then
+          guard_bit <= '1';
+        elsif(rd_i = '1') then
+          guard_bit <= '0';
+        end if;
+      end if;
+    end process;
+  end generate gen_comb_flags;
+
+  gen_registered_flags : if(g_register_flag_outputs = true and g_show_ahead = false) generate
+    p_reg_flags : process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        
+        if(rst_n_i = '0') then
+          full  <= '0';
+          empty <= '1';
+        else
+          if(usedw = 1 and rd_int = '1' and we_int = '0') then
+            empty <= '1';
+          elsif(we_int = '1' and rd_int = '0') then
+            empty <= '0';
+          end if;
+
+          if(usedw = g_size-2 and we_int = '1' and rd_int = '0') then
+            full <= '1';
+          elsif(usedw = g_size-1 and rd_int = '1' and we_int = '0') then
+            full <= '0';
+          end if;
+        end if;
+        
+      end if;
+    end process;
+  end generate gen_registered_flags;
+
+
+  gen_with_word_counter : if(g_with_count or g_with_almost_empty or g_with_almost_full or g_register_flag_outputs) generate
+    p_usedw_counter : process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        if rst_n_i = '0' then
+          usedw <= (others => '0');
+        else
+          if(we_int = '1' and rd_int = '0') then
+            usedw <= usedw + 1;
+          elsif(we_int = '0' and rd_int = '1') then
+            usedw <= usedw - 1;
+          end if;
+        end if;
+      end if;
+    end process;
+
+    count_o <= std_logic_vector(usedw(c_pointer_width-1 downto 0));
+
+  end generate gen_with_word_counter;
+
+  gen_with_almost_full : if(g_with_almost_full) generate
+    process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        if rst_n_i = '0' then
+          almost_full_o <= '0';
+        else
+          if(usedw = g_almost_full_threshold-1) then
+            if(we_int = '1' and rd_int = '0') then
+              almost_full_o <= '1';
+            elsif(rd_int = '1' and we_int = '0') then
+              almost_full_o <= '0';
+            end if;
+
+          end if;
+        end if;
+      end if;
+    end process;
+  end generate gen_with_almost_full;
+
+  gen_with_almost_empty : if(g_with_almost_empty) generate
+    process(clk_i)
+    begin
+      if rising_edge(clk_i) then
+        if rst_n_i = '0' then
+          almost_empty_o <= '1';
+        else
+          if(usedw = g_almost_empty_threshold+1) then
+            if(rd_int = '1' and we_int = '0') then
+              almost_empty_o <= '1';
+            elsif(we_int = '1' and rd_int = '0') then
+              almost_empty_o <= '0';
+            end if;
+
+          end if;
+        end if;
+      end if;
+    end process;
+  end generate gen_with_almost_empty;
+
+  full_o  <= full;
   empty_o <= empty;
-  full_o <= full;
-  almost_empty_o <= almost_empty;
-  almost_full_o <= almost_full;
 
 end syn;
