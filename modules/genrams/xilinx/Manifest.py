@@ -4,5 +4,6 @@ files = [
 "generic_dpram_dualclock.vhd",
 "generic_simple_dpram.vhd",
 "generic_spram.vhd",
-"gc_shiftreg.vhd"]
+"gc_shiftreg.vhd",
+"s6_native_dpram.v"]
 
