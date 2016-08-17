@@ -13,7 +13,7 @@
 -- Retrieval info: 	<generic name="pll_refclk_freq_hwtcl" value="100 MHz" />
 -- Retrieval info: 	<generic name="set_pld_clk_x1_625MHz_hwtcl" value="0" />
 -- Retrieval info: 	<generic name="use_rx_st_be_hwtcl" value="1" />
--- Retrieval info: 	<generic name="in_cvp_mode_hwtcl" value="1" />
+-- Retrieval info: 	<generic name="in_cvp_mode_hwtcl" value="0" />
 -- Retrieval info: 	<generic name="hip_reconfig_hwtcl" value="0" />
 -- Retrieval info: 	<generic name="num_of_func_hwtcl" value="1" />
 -- Retrieval info: 	<generic name="max_payload_size_hwtcl" value="512" />
